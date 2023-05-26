@@ -9,6 +9,7 @@ using Pulumi.AzureNative.ContainerService.Inputs;
 using Pulumi.AzureNative.DBforMySQL;
 using Pulumi.AzureNative.DBforMySQL.Inputs;
 using Pulumi.AzureNative.Resources;
+using Pulumi.AzureNative.Storage;
 using Pulumi.Random;
 using Pulumi.Tls;
 
@@ -16,6 +17,35 @@ return await Pulumi.Deployment.RunAsync(() =>
 {
     // Create an Azure Resource Group
     var resourceGroup = new ResourceGroup("azure-cs-aks");
+
+    var storageAccount = new StorageAccount("sa", new StorageAccountArgs
+    {
+        ResourceGroupName = resourceGroup.Name,
+        Sku = new Pulumi.AzureNative.Storage.Inputs.SkuArgs
+        {
+            Name = SkuName.Standard_LRS
+        },
+        Kind = Kind.StorageV2,
+    });
+
+    var checkpointBlob = new BlobContainer("check-blob", new BlobContainerArgs
+    {
+        ResourceGroupName = resourceGroup.Name,
+        AccountName = storageAccount.Name
+    });
+
+    var policyBlob = new BlobContainer("policy-blob", new BlobContainerArgs
+    {
+        ResourceGroupName = resourceGroup.Name,
+        AccountName = storageAccount.Name
+    });
+
+    var storageKeys = ListStorageAccountKeys.Invoke(new ListStorageAccountKeysInvokeArgs
+    {
+        ResourceGroupName = resourceGroup.Name,
+        AccountName = storageAccount.Name,
+    });
+
     // Generate random password
     var password = new RandomPassword("password", new RandomPasswordArgs
     {
@@ -49,9 +79,9 @@ return await Pulumi.Deployment.RunAsync(() =>
             Tier = "GeneralPurpose",
         },
         Tags =
-            {
-                { "ElasticServer", "1" },
-            },
+        {
+            { "ElasticServer", "1" },
+        },
     });
 
     var db = new Database("db", new DatabaseArgs
@@ -61,6 +91,14 @@ return await Pulumi.Deployment.RunAsync(() =>
         DatabaseName = "pulumi",
         ServerName = server.Name,
         ResourceGroupName = resourceGroup.Name,
+    });
+
+    new FirewallRule("fw-rule", new FirewallRuleArgs
+    {
+        ResourceGroupName = resourceGroup.Name,
+        ServerName = server.Name,
+        StartIpAddress = "0.0.0.0",
+        EndIpAddress = "255.255.255.255",
     });
 
     // Create an AD service principal
@@ -133,7 +171,18 @@ return await Pulumi.Deployment.RunAsync(() =>
     // Export the name of the bucket
     return new System.Collections.Generic.Dictionary<string, object?>
     {
-        ["kubeconfig"] = GetKubeConfig(resourceGroup.Name, cluster.Name)
+        ["kubeconfig"] = GetKubeConfig(resourceGroup.Name, cluster.Name),
+        ["dbEndpoint"] = server.FullyQualifiedDomainName,
+        ["dbServerName"] = server.Name,
+        ["dbUsername"] = server.AdministratorLogin,
+        ["password"] = password.Result,
+        ["storageKey1"] = storageKeys.Apply(s => s.Keys[0].Value),
+        ["storageKey2"] = storageKeys.Apply(s => s.Keys[1].Value),
+        ["checkpointBlobId"] = checkpointBlob.Id,
+        ["policypackBlobId"] = policyBlob.Id,
+        ["checkpointBloblName"] = checkpointBlob.Name,
+        ["policypackBlobName"] = policyBlob.Name,
+        ["storageAccountName"] = storageAccount.Name,
     };
 });
 
