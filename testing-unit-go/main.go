@@ -5,12 +5,20 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
-type infrastructure struct {
+type Infrastructure struct {
+	pulumi.ResourceState
+
 	group  *ec2.SecurityGroup
 	server *ec2.Instance
 }
 
-func createInfrastructure(ctx *pulumi.Context) (*infrastructure, error) {
+func newInfrastructure(ctx *pulumi.Context, name string, opts ...pulumi.ResourceOption) (*Infrastructure, error) {
+	infra := &Infrastructure{}
+	err := ctx.RegisterComponentResource("pkg:index:MyComponent", name, infra, opts...)
+	if err != nil {
+		return nil, err
+	}
+
 	group, err := ec2.NewSecurityGroup(ctx, "web-secgrp", &ec2.SecurityGroupArgs{
 		Ingress: ec2.SecurityGroupIngressArray{
 			// Uncomment to fail a test:
@@ -62,15 +70,14 @@ func createInfrastructure(ctx *pulumi.Context) (*infrastructure, error) {
 		return nil, err
 	}
 
-	return &infrastructure{
-		group:  group,
-		server: server,
-	}, nil
+	infra.group = group
+	infra.server = server
+	return infra, nil
 }
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
-		infra, err := createInfrastructure(ctx)
+		infra, err := newInfrastructure(ctx, "infra")
 		if err != nil {
 			return err
 		}

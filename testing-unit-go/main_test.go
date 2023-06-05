@@ -34,7 +34,7 @@ func (mocks) Call(args pulumi.MockCallArgs) (resource.PropertyMap, error) {
 // Applying unit tests.
 func TestInfrastructure(t *testing.T) {
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-		infra, err := createInfrastructure(ctx)
+		infra, err := newInfrastructure(ctx, "test-infra")
 		assert.NoError(t, err)
 
 		var wg sync.WaitGroup
